@@ -1,56 +1,17 @@
-const http = require('http');
+const inventory = require('../shared/inventoryClient');
 
+// Runs daily at 08:00 UTC (NCRONTAB: {sec} {min} {hour} {day} {month} {day-of-week})
 module.exports = async function (context, myTimer) {
-  const now = new Date().toISOString();
-  context.log(`📅 Timer trigger started at ${now}`);
-  const API_KEY = 'retailops-secret-7Uj9@zX1';
-  const options = {
-    hostname: '4.239.122.140',
-    port: 5000,
-    path: '/stock',
-    method: 'GET',
-    headers: {
-      'x-api-key': API_KEY
-    }
-  };
-
-  const fetchStock = () => {
-    return new Promise((resolve, reject) => {
-      const req = http.request(options, (res) => {
-        let data = '';
-
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            resolve(parsed);
-          } catch (err) {
-            reject(new Error('Failed to parse JSON response'));
-          }
-        });
-      });
-
-      req.on('error', (error) => {
-        reject(error);
-      });
-
-      req.end();
-    });
-  };
+  context.log(`📅 Timer trigger started at ${new Date().toISOString()}`);
 
   try {
-    const stock = await fetchStock();
+    const res = await inventory.getStock();
+    if (res.status !== 200) throw new Error(`inventory-api responded ${res.status}`);
 
-    let summary = '📦 Daily Stock Summary:\n';
-    for (const [item, qty] of Object.entries(stock)) {
-      summary += `- ${item}: ${qty}\n`;
-    }
-
-    context.log(summary);
-  } catch (error) {
-    context.log.error('❌ Failed to fetch stock data:', error.message);
+    const stock = JSON.parse(res.body);
+    const lines = Object.entries(stock).map(([item, qty]) => `- ${item}: ${qty}`);
+    context.log(`📦 Daily Stock Summary:\n${lines.join('\n')}`);
+  } catch (err) {
+    context.log.error('❌ Failed to fetch stock data:', err.message);
   }
 };

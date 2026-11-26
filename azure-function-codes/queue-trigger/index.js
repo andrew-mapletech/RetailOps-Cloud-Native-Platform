@@ -1,19 +1,21 @@
-module.exports = async function (context, myQueueItem) {
-  let data;
-
-  // Check if the message is base64 encoded (string), or already an object
+// Processes low-stock events published by inventory-api to the "stock-events" queue.
+function parseMessage(raw) {
+  if (typeof raw !== 'string') return raw; // runtime already deserialized JSON
   try {
-    if (typeof myQueueItem === 'string') {
-      const decoded = Buffer.from(myQueueItem, 'base64').toString();
-      data = JSON.parse(decoded);
-    } else {
-      data = myQueueItem;
-    }
+    return JSON.parse(raw);
+  } catch {
+    return JSON.parse(Buffer.from(raw, 'base64').toString()); // base64-encoded JSON
+  }
+}
 
+module.exports = async function (context, myQueueItem) {
+  try {
+    const data = parseMessage(myQueueItem);
     context.log(`📦 Processing reorder for ${data.item}`);
     context.log(`🔁 Quantity: ${data.quantity}`);
-    context.log(`✅ Reorder sent (simulated)`);
+    context.log('✅ Reorder sent (simulated)');
   } catch (err) {
-    context.log.error('❌ Error processing queue message:', err);
+    context.log.error('❌ Error processing queue message:', err.message);
+    throw err; // let the runtime retry / move to the poison queue
   }
 };
